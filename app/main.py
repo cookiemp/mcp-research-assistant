@@ -33,6 +33,7 @@ from server import config  # noqa: E402
 logger = logging.getLogger("research_assistant.cli")
 
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+DEFAULT_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -46,6 +47,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="The question to ask. Omit it to start an interactive session.",
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Gemini model name.")
+    parser.add_argument(
+        "--fallback-model",
+        default=DEFAULT_FALLBACK_MODEL,
+        help="Used automatically on rate limits (429) or 503s. Pass '' to disable.",
+    )
     parser.add_argument("--max-steps", type=int, default=8, help="Max agent steps.")
     parser.add_argument(
         "--transport",
@@ -108,6 +114,8 @@ def make_printer() -> Callable[[AgentEvent], None]:
             label = "error" if event.is_error else "ok"
             first = event.text.strip().splitlines()[0] if event.text.strip() else ""
             print(f"     [{label}] {first[:160]}", file=sys.stdout)
+        elif event.kind == "notice":
+            print(f"     [note] {event.text}", file=sys.stdout)
 
     return print_event
 
@@ -179,6 +187,7 @@ async def main_async(args: argparse.Namespace) -> int:
             agent = ResearchAgent(
                 client,
                 model=args.model,
+                fallback_model=args.fallback_model.strip() or None,
                 api_key=api_key,
                 max_steps=args.max_steps,
                 on_event=make_printer(),

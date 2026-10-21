@@ -37,7 +37,7 @@ You are a research assistant. Answer questions using the tools you are given.
 class AgentEvent:
     """A single observable step in the agent loop, for logging and the CLI."""
 
-    kind: str  # "tool_call" | "tool_result" | "answer"
+    kind: str  # "tool_call" | "tool_result" | "answer" | "notice"
     text: str = ""
     tool: str = ""
     arguments: dict[str, Any] = field(default_factory=dict)
@@ -73,6 +73,7 @@ class ResearchAgent:
         client: MCPClient,
         *,
         model: str = "gemini-2.5-flash",
+        fallback_model: str | None = "gemini-3.5-flash-lite",
         api_key: str | None = None,
         max_steps: int = 8,
         on_event: EventCallback | None = None,
@@ -80,6 +81,8 @@ class ResearchAgent:
     ) -> None:
         self.client = client
         self.model = model
+        self.fallback_model = fallback_model
+        self._active_model = model
         self.max_steps = max_steps
         self.on_event = on_event
         if llm_client is not None:
@@ -91,6 +94,45 @@ class ResearchAgent:
     def _emit(self, event: AgentEvent) -> None:
         if self.on_event:
             self.on_event(event)
+
+    def _can_fall_back(self) -> bool:
+        return bool(self.fallback_model) and self.fallback_model != self._active_model
+
+    def _generate(
+        self,
+        contents: list[genai_types.Content],
+        config: genai_types.GenerateContentConfig,
+    ) -> Any:
+        """Call the active model, switching to the fallback on transient errors.
+
+        Free-tier keys are rate limited (HTTP 429) and models occasionally
+        return 503. Falling back keeps a live demo or chat session alive.
+        """
+        try:
+            return self._genai.models.generate_content(
+                model=self._active_model, contents=contents, config=config
+            )
+        except Exception as exc:
+            if not self._can_fall_back() or not _is_transient_error(exc):
+                raise
+            previous = self._active_model
+            self._active_model = self.fallback_model or previous
+            reason = _short_reason(exc)
+            logger.warning(
+                "Model %s failed (%s); falling back to %s",
+                previous,
+                reason,
+                self._active_model,
+            )
+            self._emit(
+                AgentEvent(
+                    kind="notice",
+                    text=f"{previous} unavailable ({reason}); using {self._active_model}",
+                )
+            )
+            return self._genai.models.generate_content(
+                model=self._active_model, contents=contents, config=config
+            )
 
     async def run(self, question: str) -> str:
         """Answer a question, calling tools as needed, and return the final text."""
@@ -110,9 +152,7 @@ class ResearchAgent:
         ]
 
         for step in range(1, self.max_steps + 1):
-            response = self._genai.models.generate_content(
-                model=self.model, contents=contents, config=config
-            )
+            response = self._generate(contents, config)
             calls = list(response.function_calls or [])
 
             if not calls:
@@ -193,3 +233,39 @@ def _function_response(
 async def _yield_to_event_loop() -> None:
     """Give the stdio transport a chance to flush between tool calls."""
     await asyncio.sleep(0)
+
+
+_RETRYABLE_CODES = {429, 500, 502, 503, 504}
+_RETRYABLE_MARKERS = (
+    "RESOURCE_EXHAUSTED",
+    "UNAVAILABLE",
+    "OVERLOADED",
+    "RATE LIMIT",
+    "RATE_LIMIT",
+    "429",
+    "503",
+)
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    """True for quota / rate-limit / temporary-unavailability errors."""
+    code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if isinstance(code, int) and code in _RETRYABLE_CODES:
+        return True
+    status = getattr(exc, "status", None)
+    if isinstance(status, str) and status.upper() in {"RESOURCE_EXHAUSTED", "UNAVAILABLE"}:
+        return True
+    text = str(exc).upper()
+    return any(marker in text for marker in _RETRYABLE_MARKERS)
+
+
+def _short_reason(exc: BaseException) -> str:
+    """A one-line reason for logs and the CLI notice."""
+    code = getattr(exc, "code", None)
+    status = getattr(exc, "status", None)
+    if code and status:
+        return f"HTTP {code} {status}"
+    if code:
+        return f"HTTP {code}"
+    first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+    return first[:120]

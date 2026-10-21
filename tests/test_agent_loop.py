@@ -19,12 +19,45 @@ class FakeModels:
     def __init__(self, scripted: list[Any]) -> None:
         self._scripted = list(scripted)
         self.requests: list[list[Any]] = []
+        self.models_used: list[str] = []
 
     def generate_content(self, *, model: str, contents: list, config: Any) -> Any:
         self.requests.append(contents)
+        self.models_used.append(model)
         if not self._scripted:
             raise AssertionError("FakeModels ran out of scripted responses")
         return self._scripted.pop(0)
+
+
+class RateLimitedModels(FakeModels):
+    """Raises a 429 for the listed models, like the free tier does."""
+
+    def __init__(self, scripted: list[Any], fail_for: set[str]) -> None:
+        super().__init__(scripted)
+        self.fail_for = fail_for
+
+    def generate_content(self, *, model: str, contents: list, config: Any) -> Any:
+        self.models_used.append(model)
+        if model in self.fail_for:
+            error = RuntimeError(
+                "429 RESOURCE_EXHAUSTED: You exceeded your current quota"
+            )
+            error.code = 429
+            error.status = "RESOURCE_EXHAUSTED"
+            raise error
+        if not self._scripted:
+            raise AssertionError("FakeModels ran out of scripted responses")
+        return self._scripted.pop(0)
+
+
+class FailingModels(FakeModels):
+    def __init__(self, error: BaseException) -> None:
+        super().__init__([])
+        self.error = error
+
+    def generate_content(self, *, model: str, contents: list, config: Any) -> Any:
+        self.models_used.append(model)
+        raise self.error
 
 
 class FakeLLM:
@@ -182,3 +215,49 @@ async def test_no_tools_raises() -> None:
     agent = ResearchAgent(client, llm_client=FakeLLM([]))
     with pytest.raises(RuntimeError, match="no tools"):
         await agent.run("anything")
+
+
+async def test_falls_back_on_rate_limit_and_sticks() -> None:
+    client = FakeMCPClient([make_tool()], {"search_documents": text_result("found")})
+    llm = FakeLLM([])
+    llm.models = RateLimitedModels(
+        [
+            tool_call_response("search_documents", {"query": "mcp"}),
+            answer_response("Answered by the fallback model."),
+        ],
+        {"gemini-2.5-flash"},
+    )
+    events = []
+    agent = ResearchAgent(
+        client,
+        llm_client=llm,
+        model="gemini-2.5-flash",
+        fallback_model="gemini-3.5-flash-lite",
+        on_event=events.append,
+    )
+
+    answer = await agent.run("what do my notes say?")
+    assert answer == "Answered by the fallback model."
+    assert llm.models.models_used == [
+        "gemini-2.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash-lite",
+    ]
+    assert [e.kind for e in events][0] == "notice"
+
+
+async def test_non_transient_error_is_not_swallowed() -> None:
+    error = RuntimeError("400 INVALID_ARGUMENT: bad schema")
+    error.code = 400
+    llm = FakeLLM([])
+    llm.models = FailingModels(error)
+    agent = ResearchAgent(
+        FakeMCPClient([make_tool()], {}),
+        llm_client=llm,
+        model="gemini-2.5-flash",
+        fallback_model="gemini-3.5-flash-lite",
+    )
+
+    with pytest.raises(RuntimeError, match="INVALID_ARGUMENT"):
+        await agent.run("anything")
+    assert llm.models.models_used == ["gemini-2.5-flash"]

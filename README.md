@@ -91,6 +91,7 @@ python scripts/make_tokens.py
 | --------------------- | ------------- | ------------------ | ---------------------------------------------------- |
 | `GEMINI_API_KEY`      | for the agent | -                  | LLM key. Read from env, never in code.               |
 | `GEMINI_MODEL`        | no            | `gemini-2.5-flash` | Model name.                                          |
+| `GEMINI_FALLBACK_MODEL` | no          | `gemini-3.5-flash-lite` | Used automatically on 429/503 so demos survive free-tier limits. |
 | `DOCS_DIR`            | no            | `./documents`      | Folder the document tools may read.                  |
 | `MAX_SEARCH_RESULTS`  | no            | `10`               | Upper bound for `max_results` / `limit`.             |
 | `MAX_FETCH_CHARS`     | no            | `8000`             | Upper bound for fetch/read sizes.                    |
