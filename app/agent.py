@@ -95,6 +95,11 @@ class ResearchAgent:
         if self.on_event:
             self.on_event(event)
 
+    @property
+    def active_model(self) -> str:
+        """The model in use now (changes if the fallback was activated)."""
+        return self._active_model
+
     def _can_fall_back(self) -> bool:
         return bool(self.fallback_model) and self.fallback_model != self._active_model
 

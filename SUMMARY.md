@@ -24,6 +24,7 @@ which tools a caller may see and run.
 | MCP client | `client/mcp_client.py` | Our own client; stdio subprocess or HTTP with a bearer token. |
 | Agent loop | `app/agent.py` | Lists tools, calls the LLM, runs requested tools, feeds results back. |
 | CLI | `app/main.py` | Argument parsing, `.env` loading, interactive mode, tool listing. |
+| Web demo | `app/web.py`, `app/static/index.html` | Optional browser front end over the same agent (loopback only, no auth). |
 | Tokens | `scripts/make_tokens.py` | Generates scoped demo tokens for `.env`. |
 
 ## How a request flows
@@ -78,13 +79,14 @@ it keeps control over validation, logging, scopes, and which tools a user sees.
 
 - **MCP Inspector**: `tools/list` (4 tools, valid schemas), `tools/call`
   (`search_documents` returned ranked results), `--strict` schema check (exit 0).
-- **Automated tests**: `python -m pytest` -> **55 passed**, covering tools,
+- **Automated tests**: `python -m pytest` -> **62 passed**, covering tools,
   validation, traversal and SSRF rejection, token parsing, scope checks,
-  `tools/list` filtering, a real stdio round trip, a real HTTP round trip with
+  `tools/list` filtering, a real stdio round trip, the web demo, a real HTTP round trip with
   valid / missing / invalid / under-scoped tokens, fail-fast startup without
   auth, and the agent loop (tool use, error recovery, unknown tool, max steps).
 - **Live stdio demo** with Gemini: `search_documents` + `web_search`, cited
   `mcp-notes.md` and the spec URL.
+- **Live browser demo**: page loads, two tools run, answer cites `oauth-notes.md`.
 - **Live HTTP demo** with a full-scope token: `search_documents` +
   `read_document` + `web_search`, all through the authenticated server, with
   citations.

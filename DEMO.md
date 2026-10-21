@@ -32,13 +32,46 @@ python -m app.main --list-tools
 Clear-Host
 ```
 
-- Record only the terminal window (Win+G, OBS, or PowerPoint screen recording).
+- Record the browser window (Win+G, OBS, or PowerPoint screen recording).
 - **Never show `.env`** on screen; copy the docs token beforehand if you need it.
-- 2 terminals: one for the agent (stdio part needs one), one for the HTTP server.
+- Keep this file open on a second monitor for the narration.
 
 ---
 
-## Take 1 - stdio demo (about 75 seconds)
+## Take 1 - browser demo (recommended, about 60 seconds)
+
+**0:00-0:10** - Start the page.
+
+```powershell
+python -m app.web
+```
+
+A browser opens at `http://127.0.0.1:8765`. The header says *AskMyDocs*, with
+the badges "MCP server - stdio", "custom MCP client", "Gemini agent loop".
+
+Say: *"This is a thin web front end over the same agent. The server is a real
+MCP server speaking stdio; the model is Gemini."*
+
+**0:10-0:15** - Click the **Notes + web** example chip (it fills the question
+and runs it, so you never type on camera).
+
+**0:15-0:45** - Talk over the tool cards as they appear:
+
+*"The agent listed the server's tools, passed their schemas to Gemini, and the
+model chose search_documents. The result came back through my MCP client. Now
+it reads the file, then searches the web."*
+
+**0:45-1:00** - Point at the answer card.
+
+*"Every claim cites a source: the local file and the URL. The footer shows the
+model and the response time."*
+
+If the primary model is rate limited, a yellow **note** card appears saying it
+switched to `gemini-3.5-flash-lite`; the run continues.
+
+---
+
+## Take 2 - terminal demo (backup, about 75 seconds)
 
 **0:00-0:10** - Show the tools.
 
@@ -87,7 +120,7 @@ A: Based on your local notes, MCP stdio servers should **never print to stdout**
 
 ---
 
-## Take 2 - HTTP + auth + scopes (about 45 seconds, optional but strong)
+## Take 3 - HTTP + auth + scopes (about 45 seconds, optional but strong)
 
 **1:15-1:20** - Terminal 1: start the authenticated server.
 
@@ -149,7 +182,7 @@ Stop the server with `Ctrl+C` in terminal 1.
 
 ---
 
-## Optional third take - error recovery (20 seconds)
+## Optional fourth take - error recovery (20 seconds)
 
 ```powershell
 python scripts/call_tool.py search_documents --arg query=oauth --arg limit=99
@@ -168,17 +201,17 @@ Expected error text includes `limit must be between 1 and 10` and
 
 Submit this file together with `README.md` and `SUMMARY.md`. The transcript
 above is the real output of the commands; the automated suite
-(`python -m pytest` -> 55 passed) independently verifies the same behavior.
+(`python -m pytest` -> 62 passed) independently verifies the same behavior.
 
 ## What each part demonstrates
 
 | Requirement | Where it appears |
 | --- | --- |
-| Agent loop: list -> LLM -> tools -> repeat | Take 1, `app/agent.py` |
-| At least two tools used in one task | Take 1: search + read + web search |
-| Citations | Take 1 final answer |
-| Custom MCP client (not a built-in host) | Takes 1 and 2, `client/mcp_client.py` |
-| Streamable HTTP transport | Take 2 |
-| Authentication + scoped access | Take 2, docs-only token and 401 |
-| Errors as recoverable results | Take 3 |
+| Agent loop: list -> LLM -> tools -> repeat | Take 1 or 2, `app/agent.py` |
+| At least two tools used in one task | Take 1 or 2: search + read + web search |
+| Citations | Take 1 or 2 final answer |
+| Custom MCP client (not a built-in host) | Takes 1-3, `client/mcp_client.py` |
+| Streamable HTTP transport | Take 3 |
+| Authentication + scoped access | Take 3, docs-only token and 401 |
+| Errors as recoverable results | Take 4 |
 | Resource + prompt | `python -m app.main --list-tools --show-prompt` |

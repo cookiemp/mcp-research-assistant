@@ -43,7 +43,7 @@ Expected: `deps ok`.
 
 ---
 
-## 1. Automated test suite (55 tests, no LLM, no keys)
+## 1. Automated test suite (62 tests, no LLM, no keys)
 
 ```powershell
 python -m pytest
@@ -52,7 +52,7 @@ python -m pytest
 Expected:
 
 ```
-55 passed
+62 passed
 ```
 
 What is covered:
@@ -165,6 +165,27 @@ npx.cmd -y @modelcontextprotocol/inspector --cli --cwd . --method tools/list --s
 ```
 
 Expected: exit code `0` and no error-severity schema issues.
+
+---
+
+### 3b. Browser demo (optional)
+
+```powershell
+python -m app.web --no-browser --port 8765
+```
+
+Open `http://127.0.0.1:8765/` and click the **OAuth notes** chip. Expect two
+tool cards (`search_documents`, then `read_document`) and an answer citing
+`oauth-notes.md`. The footer shows the model and elapsed time.
+
+Headless check (server must be running):
+
+```powershell
+python -c "import httpx; print(httpx.post('http://127.0.0.1:8765/api/ask', json={'question': 'What does my oauth note say about authentication vs authorization? Cite the file.'}, timeout=120).json())"
+```
+
+Pass: `steps` contains `tool_call`/`tool_result` entries and `answer` cites the
+file. A yellow `note` card means the model fallback kicked in (429/503).
 
 ---
 
@@ -331,10 +352,11 @@ Remove-Item Env:MCP_AUTH_TOKENS -ErrorAction SilentlyContinue
 
 | Check | Pass condition |
 | --- | --- |
-| `python -m pytest` | `55 passed` |
+| `python -m pytest` | `62 passed` |
 | Inspector `tools/list` | 4 tools with JSON schemas |
 | Inspector `--strict` | exit code 0 |
 | stdio demo | >= 2 tools, cited answer |
+| web demo | page loads, tool cards appear, answer cites the file |
 | HTTP full token | 4 tools, agent works |
 | HTTP docs token | 2 tools, `web_search` -> `Permission denied` |
 | HTTP no/wrong token | 401, no tools listed |
@@ -354,4 +376,5 @@ Remove-Item Env:MCP_AUTH_TOKENS -ErrorAction SilentlyContinue
 | Only 2 tools listed | You are using the docs-only token; that is correct scoped behavior. |
 | `Address already in use` | Use another `--port`, and update `--url`. |
 | Web search fails | DuckDuckGo can rate-limit; retry once or answer from local docs. |
+| `429 RESOURCE_EXHAUSTED` | Free tier is 5 requests/min. The agent switches to `gemini-3.5-flash-lite` automatically; wait ~60s if both are limited. |
 | Server prints nothing to stdout | Correct: stdio mode logs to stderr and reserves stdout for JSON-RPC. |

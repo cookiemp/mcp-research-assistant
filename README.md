@@ -43,12 +43,14 @@ mcp-research-assistant/
 │   └── mcp_client.py      # our own MCP client: stdio + Streamable HTTP
 ├── app/
 │   ├── agent.py           # agent loop: list -> LLM -> tool calls -> repeat
-│   └── main.py            # CLI entry point
+│   ├── main.py            # CLI entry point
+│   ├── web.py             # local browser demo (Starlette, loopback only)
+│   └── static/index.html  # the demo page
 ├── scripts/
 │   ├── make_tokens.py     # generates scoped demo tokens
 │   └── call_tool.py       # call one tool directly, no LLM needed
 ├── documents/             # sample notes the doc tools read
-├── tests/                 # 55 tests (tools, safety, auth, HTTP, agent, stdio)
+├── tests/                 # 62 tests (tools, safety, auth, HTTP, agent, stdio, web)
 ├── demo.py                # canned demo question (uses >= 2 tools)
 ├── DEMO.md                # 2-minute recording script + real transcript
 ├── TESTING.md             # step-by-step manual test guide
@@ -128,6 +130,20 @@ python -m app.main --list-tools --show-prompt
 # Canned demo that needs a local-doc tool and a web tool
 python demo.py
 ```
+
+### Browser demo (optional, no extra dependencies)
+
+A local single-page UI over the same agent, for demos and screenshots:
+
+```bash
+python -m app.web                  # opens http://127.0.0.1:8765
+python -m app.web --no-browser     # print the URL only
+```
+
+Type a question (or click an example) and the page shows each MCP tool call,
+its result, and the cited answer. It binds to loopback and has no
+authentication, so do not expose it. Starlette and uvicorn already come with
+the MCP SDK.
 
 ### Streamable HTTP (remote, authenticated)
 
@@ -289,7 +305,7 @@ full token      -> all four tools
 ## Tests
 
 ```bash
-python -m pytest        # 55 tests, no LLM call required
+python -m pytest        # 62 tests, no LLM call required
 ```
 
 Covers:
